@@ -1,11 +1,74 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <title>Моя первая веб-страница</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Вход через GitHub</title>
 </head>
 <body>
-    <h1>Привет, мир!</h1>
-    <p>Это моя первая веб-страница.</p>
+
+  <!-- Кнопка для входа -->
+  <button id="github-login-btn">Войти через GitHub</button>
+
+  <script type="module">
+    // 1. Импорт необходимых функций из Firebase SDK
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-analytics.js";
+    // Импорт для аутентификации
+    import { getAuth, GithubAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
+
+    // 2. Конфигурация Firebase (взята из вашего скриншота)
+    const firebaseConfig = {
+  apiKey: "AIzaSyBFqj14hDzC5gMYhjiGRei3ieOKkll2jkk",
+  authDomain: "ierihon-e33e6.firebaseapp.com",
+  projectId: "ierihon-e33e6",
+  storageBucket: "ierihon-e33e6.firebasestorage.app",
+  messagingSenderId: "124485171591",
+  appId: "1:124485171591:web:aa381f08f75c4a5994bb22",
+  measurementId: "G-2ZFNT68R04"
+};
+
+    // 3. Инициализация Firebase
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+    
+    // Инициализация аутентификации
+    const auth = getAuth(app);
+    
+    // Создание экземпляра провайдера GitHub
+    const provider = new GithubAuthProvider();
+
+    // 4. Обработчик нажатия на кнопку
+    document.getElementById('github-login-btn').addEventListener('click', () => {
+      
+      // Вызов всплывающего окна для входа через GitHub
+      signInWithPopup(auth, provider)
+        .then((result) => {
+          // Успешный вход
+          const user = result.user;
+          console.log("Успешный вход:", user);
+          alert(`Привет, ${user.displayName || user.email}!`);
+          
+          // Здесь можно перенаправить пользователя на другую страницу
+          // window.location.href = '/dashboard';
+        })
+        .catch((error) => {
+          // Обработка ошибок
+          const errorCode = error.code;
+          const errorMessage = error.message;
+          console.error("Ошибка входа:", errorCode, errorMessage);
+          
+          // Улучшенное отображение ошибки для пользователя
+          if (errorCode === 'auth/popup-closed-by-user') {
+            alert('Окно входа было закрыто. Попробуйте снова.');
+          } else if (errorCode === 'auth/account-exists-with-different-credential') {
+            alert('Аккаунт с таким email уже существует. Войдите другим способом.');
+          } else {
+            alert(`Ошибка: ${errorMessage}`);
+          }
+        });
+    });
+  </script>
+
 </body>
 </html>
