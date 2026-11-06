@@ -1,10 +1,56 @@
-    <!-- ТЕПЕРЬ ПОДКЛЮЧАЕМ ИЗ СКАЧАННОЙ ПАПКИ NODE_MODULES -->
-    <script type="module">
-        import { initializeApp } from "./node_modules/@firebase/app/dist/esm/index.js";
-        import { getAuth, signInWithPopup, GithubAuthProvider, GoogleAuthProvider, signOut, onAuthStateChanged } from "./node_modules/@firebase/auth/dist/esm/index.js";
-        import { getDatabase, ref, push, onValue } from "./node_modules/@firebase/database/dist/esm/index.js";
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Auth & DB</title>
+    <style>
+        body { font-family: sans-serif; margin: 30px; background-color: #f9f9f9; color: #333; }
+        .hidden { display: none; }
+        .btn { padding: 10px 20px; margin: 5px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; }
+        .auth-container { margin-bottom: 20px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .db-container { border-top: 1px solid #ccc; padding-top: 20px; margin-top: 20px; }
+        ul { list-style-type: square; padding-left: 20px; }
+        li { margin: 8px 0; background: white; padding: 8px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        input { padding: 10px; width: 250px; border: 1px solid #ccc; border-radius: 4px; }
+    </style>
+</head>
+<body>
 
-        // КОНФИГУРАЦИЯ FIREBASE (Укажите ваши реальные ключи!)
+    <h2>Firebase Интеграция: Auth + Realtime DB</h2>
+
+    <!-- БЛОК АВТОРИЗАЦИИ -->
+    <div class="auth-container">
+        <div id="unauth-block">
+            <button id="btn-github" class="btn" style="background: #24292e; color: white;">Войти через GitHub</button>
+            <button id="btn-google" class="btn" style="background: #4285f4; color: white;">Войти через Google</button>
+        </div>
+        
+        <div id="auth-block" class="hidden">
+            <p>Привет, <b id="user-name">Гость</b>! (<span id="user-email"></span>)</p>
+            <button id="btn-logout" class="btn" style="background: #ea4335; color: white;">Выйти</button>
+        </div>
+    </div>
+
+    <!-- БЛОК РАБОТЫ С БАЗОЙ ДАННЫХ -->
+    <div id="db-block" class="db-container hidden">
+        <h3>Добавить запись в Realtime Database</h3>
+        <form id="todo-form">
+            <input type="text" id="todo-input" placeholder="Введите сообщение..." required>
+            <button type="submit" class="btn" style="background: #4caf50; color: white;">Добавить</button>
+        </form>
+
+        <h3>Список данных из БД:</h3>
+        <ul id="data-list"></ul>
+    </div>
+
+    <!-- ПОДКЛЮЧЕНИЕ СТАБИЛЬНЫХ БИБЛИОТЕК FIREBASE V8 (COMPAT) -->
+    <script src="https://gstatic.com"></script>
+    <script src="https://gstatic.com"></script>
+    <script src="https://gstatic.com"></script>
+
+    <script>
+        // КОНФИГУРАЦИЯ FIREBASE (!!! ОБЯЗАТЕЛЬНО ЗАМЕНИТЕ НА ВАШИ КЛЮЧИ ИЗ КОНСОЛИ !!!)
         const firebaseConfig = {
             apiKey: "ВАШ_API_KEY",
             authDomain: "ВАШ_PROJECT_://firebaseapp.com",
@@ -15,16 +61,17 @@
             appId: "ВАШ_APP_ID"
         };
 
-        // Инициализация сервисов Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getDatabase(app);
+        // Инициализация Firebase
+        firebase.initializeApp(firebaseConfig);
+        
+        const auth = firebase.auth();
+        const db = firebase.database();
 
-        // Провайдеры
-        const githubProvider = new GithubAuthProvider();
-        const googleProvider = new GoogleAuthProvider();
+        // Провайдеры авторизации
+        const googleProvider = new firebase.auth.GoogleAuthProvider();
+        const githubProvider = new firebase.auth.GithubAuthProvider();
 
-        // DOM элементы
+        // DOM элементы страницы
         const unauthBlock = document.getElementById('unauth-block');
         const authBlock = document.getElementById('auth-block');
         const dbBlock = document.getElementById('db-block');
@@ -36,21 +83,21 @@
 
         // Вход через GitHub
         document.getElementById('btn-github').addEventListener('click', () => {
-            signInWithPopup(auth, githubProvider).catch(err => alert("Ошибка GitHub: " + err.message));
+            auth.signInWithPopup(githubProvider).catch(err => alert("Ошибка GitHub: " + err.message));
         });
 
         // Вход через Google
         document.getElementById('btn-google').addEventListener('click', () => {
-            signInWithPopup(auth, googleProvider).catch(err => alert("Ошибка Google: " + err.message));
+            auth.signInWithPopup(googleProvider).catch(err => alert("Ошибка Google: " + err.message));
         });
 
         // Выход из аккаунта
         document.getElementById('btn-logout').addEventListener('click', () => {
-            signOut(auth).catch(err => alert("Ошибка при выходе: " + err.message));
+            auth.signOut().catch(err => alert("Ошибка при выходе: " + err.message));
         });
 
-        // Отслеживание состояния авторизации
-        onAuthStateChanged(auth, (user) => {
+        // Отслеживание состояния авторизации (Вошел / Вышел)
+        auth.onAuthStateChanged((user) => {
             if (user) {
                 userName.textContent = user.displayName || "Пользователь";
                 userEmail.textContent = user.email || "";
@@ -59,7 +106,7 @@
                 authBlock.classList.remove('hidden');
                 dbBlock.classList.remove('hidden');
                 
-                loadDatabaseData(); 
+                loadDatabaseData(); // Запускаем чтение базы
             } else {
                 unauthBlock.classList.remove('hidden');
                 authBlock.classList.add('hidden');
@@ -74,22 +121,23 @@
             const text = todoInput.value.trim();
             if (!text) return;
 
-            const messagesRef = ref(db, 'messages');
+            // Узел 'messages' в вашей БД
+            const messagesRef = db.ref('messages');
             
-            push(messagesRef, {
+            messagesRef.push({
                 text: text,
                 author: auth.currentUser.displayName || auth.currentUser.email || "Аноним",
-                timestamp: Date.now()
+                timestamp: firebase.database.ServerValue.TIMESTAMP
             }).then(() => {
-                todoInput.value = ''; 
+                todoInput.value = ''; // Очищаем поле
             }).catch(err => alert("Ошибка записи в БД: " + err.message));
         });
 
         // Чтение данных из Realtime Database в реальном времени
         function loadDatabaseData() {
-            const messagesRef = ref(db, 'messages');
+            const messagesRef = db.ref('messages');
             
-            onValue(messagesRef, (snapshot) => {
+            messagesRef.on('value', (snapshot) => {
                 dataList.innerHTML = ''; 
                 
                 if (snapshot.exists()) {
@@ -108,3 +156,5 @@
             });
         }
     </script>
+</body>
+</html>
