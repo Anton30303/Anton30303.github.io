@@ -5,13 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Firebase Auth & DB</title>
     <style>
-        body { font-family: sans-serif; margin: 30px; }
+        body { font-family: sans-serif; margin: 30px; background-color: #f9f9f9; color: #333; }
         .hidden { display: none; }
-        .btn { padding: 10px 15px; margin: 5px; cursor: pointer; }
-        .auth-container { margin-bottom: 20px; }
-        .db-container { border-top: 1px solid #ccc; padding-top: 20px; }
+        .btn { padding: 10px 20px; margin: 5px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; }
+        .auth-container { margin-bottom: 20px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .db-container { border-top: 1px solid #ccc; padding-top: 20px; margin-top: 20px; }
         ul { list-style-type: square; padding-left: 20px; }
-        li { margin: 5px 0; }
+        li { margin: 8px 0; background: white; padding: 8px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        input { padding: 10px; width: 250px; border: 1px solid #ccc; border-radius: 4px; }
     </style>
 </head>
 <body>
@@ -35,41 +36,41 @@
     <div id="db-block" class="db-container hidden">
         <h3>Добавить запись в Realtime Database</h3>
         <form id="todo-form">
-            <input type="text" id="todo-input" placeholder="Введите текст..." required style="padding: 8px; width: 250px;">
-            <button type="submit" class="btn">Добавить</button>
+            <input type="text" id="todo-input" placeholder="Введите сообщение..." required>
+            <button type="submit" class="btn" style="background: #4caf50; color: white;">Добавить</button>
         </form>
 
         <h3>Список данных из БД:</h3>
         <ul id="data-list"></ul>
     </div>
 
-    <!-- ПОДКЛЮЧЕНИЕ СДК FIREBASE (Модульная версия v9/v10) -->
+    <!-- АЛЬТЕРНАТИВНОЕ ПОДКЛЮЧЕНИЕ SDK FIREBASE ЧЕРЕЗ UNPKG И ДЕСТРУКТУРИЗАЦИЮ -->
     <script type="module">
-        import { initializeApp } from "https://gstatic.com";
-        import { getAuth, signInWithPopup, GithubAuthProvider, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://gstatic.com";
-        import { getDatabase, ref, push, onValue } from "https://gstatic.com";
+        import { initializeApp } from "https://unpkg.com";
+        import { getAuth, signInWithPopup, GithubAuthProvider, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://unpkg.com";
+        import { getDatabase, ref, push, onValue } from "https://unpkg.com";
 
-        // КОНФИГУРАЦИЯ FIREBASE (Замените своими данными из консоли!)
+        // КОНФИГУРАЦИЯ FIREBASE (!!! ЗАМЕНИТЕ ЭТИ ШАБЛОНЫ НА ВАШИ РЕАЛЬНЫЕ КЛЮЧИ ИЗ КОНСОЛИ FIREBASE !!!)
         const firebaseConfig = {
             apiKey: "ВАШ_API_KEY",
             authDomain: "ВАШ_PROJECT_://firebaseapp.com",
-            databaseURL: "https://ВАШ_PROJECT_://firebaseio.com", // Ссылка на Realtime DB
+            databaseURL: "https://ВАШ_PROJECT_://firebaseio.com", 
             projectId: "ВАШ_PROJECT_ID",
             storageBucket: "ВАШ_PROJECT_://appspot.com",
             messagingSenderId: "ВАШ_ОТПРАВИТЕЛЬ",
             appId: "ВАШ_APP_ID"
         };
 
-        // Инициализация сервисов
+        // Инициализация сервисов Firebase
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getDatabase(app);
 
-        // Провайдеры авторизации
+        // Провайдеры
         const githubProvider = new GithubAuthProvider();
         const googleProvider = new GoogleAuthProvider();
 
-        // Элементы интерфейса
+        // DOM элементы
         const unauthBlock = document.getElementById('unauth-block');
         const authBlock = document.getElementById('auth-block');
         const dbBlock = document.getElementById('db-block');
@@ -79,10 +80,6 @@
         const todoForm = document.getElementById('todo-form');
         const todoInput = document.getElementById('todo-input');
 
-        // ==========================================
-        // 1. ЛОГИКА АВТОРИЗАЦИИ (GitHub, Google, Выход)
-        // ==========================================
-        
         // Вход через GitHub
         document.getElementById('btn-github').addEventListener('click', () => {
             signInWithPopup(auth, githubProvider).catch(err => alert("Ошибка GitHub: " + err.message));
@@ -98,66 +95,55 @@
             signOut(auth).catch(err => alert("Ошибка при выходе: " + err.message));
         });
 
-        // Слушатель состояния пользователя (Автоматически срабатывает при входе/выходе)
+        // Отслеживание состояния авторизации
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                // Пользователь вошел
                 userName.textContent = user.displayName || "Пользователь";
-                userEmail.textContent = user.email;
+                userEmail.textContent = user.email || "";
                 
                 unauthBlock.classList.add('hidden');
                 authBlock.classList.remove('hidden');
                 dbBlock.classList.remove('hidden');
                 
-                // Включаем чтение базы данных для вошедшего юзера
-                loadDatabaseData();
+                loadDatabaseData(); // Загружаем базу данных
             } else {
-                // Пользователь вышел
                 unauthBlock.classList.remove('hidden');
                 authBlock.classList.add('hidden');
                 dbBlock.classList.add('hidden');
-                dataList.innerHTML = ''; // Очищаем список
+                dataList.innerHTML = '';
             }
         });
 
-        // ==========================================
-        // 2. РАБОТА С REALTIME DATABASE
-        // ==========================================
-
-        // Отправка данных из формы в БД
+        // Отправка данных в Realtime Database
         todoForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const text = todoInput.value.trim();
             if (!text) return;
 
-            // Ссылка на узел "messages" в базе данных
             const messagesRef = ref(db, 'messages');
             
-            // Записываем объект с текстом и именем автора
             push(messagesRef, {
                 text: text,
-                author: auth.currentUser.displayName || auth.currentUser.email,
+                author: auth.currentUser.displayName || auth.currentUser.email || "Аноним",
                 timestamp: Date.now()
             }).then(() => {
-                todoInput.value = ''; // Очищаем поле ввода
+                todoInput.value = ''; 
             }).catch(err => alert("Ошибка записи в БД: " + err.message));
         });
 
-        // Функция чтения данных в реальном времени
+        // Чтение данных из Realtime Database в реальном времени
         function loadDatabaseData() {
             const messagesRef = ref(db, 'messages');
             
-            // onValue автоматически срабатывает каждый раз, когда данные в БД меняются
             onValue(messagesRef, (snapshot) => {
-                dataList.innerHTML = ''; // Очищаем старый список на экране
+                dataList.innerHTML = ''; 
                 
                 if (snapshot.exists()) {
                     const data = snapshot.val();
-                    // Цикл по всем записям в узле
                     Object.keys(data).forEach(key => {
                         const item = data[key];
                         const li = document.createElement('li');
-                        li.textContent = `${item.author}: ${item.text}`;
+                        li.innerHTML = `<strong>${item.author}:</strong> ${item.text}`;
                         dataList.appendChild(li);
                     });
                 } else {
